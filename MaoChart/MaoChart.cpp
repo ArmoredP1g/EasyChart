@@ -33,22 +33,43 @@ MaoChart::~MaoChart()
 //drawing event
 void MaoChart::paintEvent(QPaintEvent *)
 {	
-	if (QApplication::activeWindow() == this)
+
+	//!!!该控件在被其他窗口调用时 活动窗口不会是该控件
+	if (QApplication::activeWindow() != NULL)
 	{
 		window_width = QApplication::activeWindow()->width();
 		window_height = QApplication::activeWindow()->height();
 	}
 
+	//画标题
+	drawTitle();
 	//画坐标
 	drawCoordinate();
 
 	//画点
 	drawPoints();
+
+	//画线
+	drawLines();
+
+	//检测鼠标悬停在某一点上
+	detectPointHovering();
 }
 
 void MaoChart::mouseMoveEvent(QMouseEvent *e)
 {
+	CursorPos_x = e->pos().x();
+	CursorPos_y = e->pos().y();
+}
 
+void MaoChart::setStaticBorder(double x_min, double x_max, double y_min, double y_max)
+{
+	setAdaptiveLine(-1);
+	setAdaptivePoint(-1);
+	x_upperRange = x_max;
+	x_lowerRange = x_min;
+	y_upperRange = y_max;
+	y_lowerRange = y_min;
 }
 
 void MaoChart::set_padding(double padding)
@@ -63,7 +84,11 @@ void MaoChart::setTitle(QString name)
 
 void MaoChart::addLine(QList<QPointF> list)
 {
+	QPen * pen = new QPen;
 
+	//默认风格
+	pen->setColor(Qt::black);
+	pen->setWidth(1);
 	for (int i = 0; i < list.size(); i++)
 	{
 		if (lineAdaptiveSpan != -1)
@@ -85,9 +110,45 @@ void MaoChart::addLine(QList<QPointF> list)
 				y_lowerRange = list.at(i).y() + lineAdaptiveSpan;
 			}
 		}
+		addPoint(list.at(i), "");
 	}
 
 	LineList.append(list);
+	LinePenList.append(pen);
+}
+
+void MaoChart::addLine(QList<QPointF> list,QColor color)
+{
+	QPen * pen = new QPen;
+	//默认风格
+	pen->setColor(color);
+	pen->setWidth(1);
+	for (int i = 0; i < list.size(); i++)
+	{
+		if (lineAdaptiveSpan != -1)
+		{
+			if (list.at(i).x() >= x_upperRange)
+			{
+				x_upperRange = list.at(i).x() + lineAdaptiveSpan;
+			}
+			if (list.at(i).x() <= x_lowerRange)
+			{
+				x_lowerRange = list.at(i).x() + lineAdaptiveSpan;
+			}
+			if (list.at(i).y() >= y_upperRange)
+			{
+				y_upperRange = list.at(i).y() + lineAdaptiveSpan;
+			}
+			if (list.at(i).y() <= y_lowerRange)
+			{
+				y_lowerRange = list.at(i).y() + lineAdaptiveSpan;
+			}
+		}
+		addPoint(list.at(i), "",color);
+	}
+
+	LineList.append(list);
+	LinePenList.append(pen);
 }
 
 void MaoChart::setAdaptivePoint(double span)
@@ -116,13 +177,24 @@ void MaoChart::set_y_pointDensity(int x)
 	}
 }
 
-void MaoChart::addPoint(QPointF point)
+void MaoChart::set_gridOn(bool on)
 {
-	QLabel * lable = new QLabel(this);
-	lable->setStyleSheet("QLabel{background-color:2px solid rgb(0, 200, 150);}");
-	lable->setText("点");
+	gridOn = on;
+}
+
+void MaoChart::addPoint(QPointF point, string time)
+{
+	QPen * pen = new QPen;
+
+	//默认风格
+	pen->setColor(Qt::black);
+	pen->setWidth(1);
+
 	pointList->append(point);
-	LableList_point.append(lable);
+	pointPenList.append(pen);
+	pointTimeList.append(QString::fromLocal8Bit(time.data()));
+
+
 	if (pointAdaptiveSpan != -1)
 	{
 		if (point.x() >= x_upperRange)
@@ -142,6 +214,51 @@ void MaoChart::addPoint(QPointF point)
 			y_lowerRange = point.y() - pointAdaptiveSpan;
 		}
 	}
+}
+
+//自定义颜色的重载
+void MaoChart::addPoint(QPointF point, string time,QColor color)
+{
+	QPen * pen = new QPen;
+
+	pen->setColor(color);
+	pen->setWidth(1);
+
+	pointList->append(point);
+	pointPenList.append(pen);
+	pointTimeList.append(QString::fromLocal8Bit(time.data()));
+
+
+	if (pointAdaptiveSpan != -1)
+	{
+		if (point.x() >= x_upperRange)
+		{
+			x_upperRange = point.x() + pointAdaptiveSpan;
+		}
+		if (point.x() <= x_lowerRange)
+		{
+			x_lowerRange = point.x() - pointAdaptiveSpan;
+		}
+		if (point.y() >= y_upperRange)
+		{
+			y_upperRange = point.y() + pointAdaptiveSpan;
+		}
+		if (point.y() <= y_lowerRange)
+		{
+			y_lowerRange = point.y() - pointAdaptiveSpan;
+		}
+	}
+}
+
+void MaoChart::drawTitle()
+{
+	QPainter painter(this);
+	QRectF rect;
+	QFont font("黑体", 20, QFont::Bold, false);
+	rect = QRectF(window_width/2 - 250, 0, 500, 50);
+	painter.setFont(font);
+	painter.drawText(rect, Qt::AlignHCenter, Title);
+
 }
 
 void MaoChart::drawCoordinate()
@@ -164,30 +281,76 @@ void MaoChart::drawCoordinate()
 	//绘制x轴线数点
 	double x_PixelSpacing = (window_width - 2*padding) / (x_pointDensity + 1);
 	double y_PixelSpacing = (window_height - 2 * padding) / (y_pointDensity + 1);
-	for (int i = 1; i < x_pointDensity +1; i++)
+	for (int i = 0; i < x_pointDensity +2; i++)
 	{
-		QString num = QString::number(2309.1443, 10, 0);
+		QString num = QString::number(x_lowerRange+i*(x_upperRange-x_lowerRange)/(x_pointDensity+1), 10, 2);
+
+		//坐标点线段的起点和终点
 		QPointF s = QPointF(padding +i*x_PixelSpacing, window_height - padding);
 		QPointF e = QPointF(padding + i * x_PixelSpacing, window_height - padding + 5);
+
+		//纵向网格线的终点 起点和坐标点线段一致
+		QPointF e_grid = QPointF(padding + i * x_PixelSpacing, padding);
 		
 		QRectF rect = QRectF(QPointF((padding + i * x_PixelSpacing) - 22.5, window_height - padding + 7), QPointF((padding + i * x_PixelSpacing) + 22.5, window_height - padding + 7 + 22.5));
 
 		painter.drawLine(s, e);
+
+		//绘制网格
+		if (gridOn)
+		{
+			pen.setColor(QColor(128, 128, 128));
+			pen.setWidth(1);
+			pen.setStyle(Qt::DashLine);
+			painter.setPen(pen);
+			painter.setRenderHints(false);
+
+			painter.drawLine(s, e_grid);
+			
+			pen.setColor(QColor(0, 0, 0));
+			pen.setWidth(2);
+			painter.setPen(pen);
+			painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+
+		}
 		//painter.drawRect(rect);
 		painter.drawText(rect, Qt::AlignHCenter, num);
 	}
 
 
 	//绘制y轴线数点
-	for (int i = 1; i < y_pointDensity + 1; i++)
+	for (int i = 0; i < y_pointDensity + 2; i++)
 	{
-		QString num = QString::number(2309.1443, 10, 0);
+		QString num = QString::number(y_lowerRange + i * (y_upperRange - y_lowerRange) / (y_pointDensity+1), 10, 2);
+
+		//坐标点线段的起点和终点
 		QPointF s = QPointF(padding, window_height - i * y_PixelSpacing - padding);
 		QPointF e = QPointF(padding - 5, window_height - i * y_PixelSpacing - padding);
+		//横向网格线的终点 起点和坐标点线段一致
+		QPointF e_grid = QPointF(window_width - padding, window_height - i * y_PixelSpacing - padding);
 		
 		QRectF rect = QRectF(QPointF(padding - 7 - 45, window_height - i * y_PixelSpacing - padding - 22.5/3), QPointF(padding - 7, window_height - i * y_PixelSpacing - padding + 22.5/3));
 		
 		painter.drawLine(s, e);
+
+		//绘制网格
+		if (gridOn)
+		{
+			pen.setColor(QColor(128, 128, 128));
+			pen.setWidth(1);
+			pen.setStyle(Qt::DashLine);
+			painter.setPen(pen);
+			painter.setRenderHints(false);
+
+			painter.drawLine(s, e_grid);
+
+			pen.setColor(QColor(0, 0, 0));
+			pen.setWidth(2);
+			painter.setPen(pen);
+			painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+
+		}
+
 		//painter.drawRect(rect);
 		painter.drawText(rect, Qt::AlignHCenter, num);
 	}
@@ -195,70 +358,73 @@ void MaoChart::drawCoordinate()
 
 void MaoChart::drawPoints()
 {
+	QPainter painter(this);
+	painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
 	for (int i = 0; i < pointList->size(); i++)
 	{
 		double pixel_x = X_axis_mapping(pointList->at(i).x());
 		double pixel_y = Y_axis_mapping(pointList->at(i).y());
 		
-		LableList_point.at(i)->setVisible(true);
-		LableList_point.at(i)->setGeometry(pixel_x - 2, pixel_y - 2, 4, 4);
+
+		painter.setPen(*pointPenList.at(i));
+		painter.setBrush(QBrush(pointPenList.at(i)->color()));
+		painter.drawEllipse(pixel_x - 3, pixel_y - 3, 3 *2 , 3 * 2);
+
 	}
 
 }
 
-void MaoChart::update()
+void MaoChart::drawLines()
 {
-	//huaxian
-	/*for (int i = 0; i < LineList.size(); i++)
+	QPainter painter(this);
+	painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+	for (int i = 0; i < LineList.size(); i++)
 	{
-		QLineSeries *series = new QLineSeries(chart);
-		for (int j = 0; j < LineList.at(i).size(); j++)
+		painter.setPen(*LinePenList.at(i));
+		for (int j = 0; j < LineList.at(i).size()-1; j++)
 		{
-			if (lineAdaptiveSpan != -1)
-			{
-				if (LineList.at(i).at(j).x() >= x_upperRange)
-				{
-					x_upperRange = LineList.at(i).at(j).x() + lineAdaptiveSpan;
-				}
-				if (LineList.at(i).at(j).x() <= x_lowerRange)
-				{
-					x_lowerRange = LineList.at(i).at(j).x() + lineAdaptiveSpan;
-				}
-				if (LineList.at(i).at(j).y() >= y_upperRange)
-				{
-					y_upperRange = LineList.at(i).at(j).y() + lineAdaptiveSpan;
-				}
-				if (LineList.at(i).at(j).y() <= y_lowerRange)
-				{
-					y_lowerRange = LineList.at(i).at(j).y() + lineAdaptiveSpan;
-				}
-			}
-			series->append(LineList.at(i).at(j));
-		}
-		chart->addSeries(series);
-	}*/
+			double pixel_x1 = X_axis_mapping(LineList.at(i).at(j).x());
+			double pixel_y1 = Y_axis_mapping(LineList.at(i).at(j).y());
+			double pixel_x2 = X_axis_mapping(LineList.at(i).at(j + 1).x());
+			double pixel_y2 = Y_axis_mapping(LineList.at(i).at(j + 1).y());
 
-	//draw points
-	/*QScatterSeries * series2 = new QScatterSeries(chart);
+			painter.drawLine(pixel_x1, pixel_y1, pixel_x2, pixel_y2);
+		}
+	}
+
+}
+
+
+void MaoChart::detectPointHovering()
+{
+	double pixel_x;
+	double pixel_y;
+
 	for (int i = 0; i < pointList->size(); i++)
 	{
-		series2->append(pointList->at(i));
+		pixel_x = X_axis_mapping(pointList->at(i).x());
+		pixel_y = Y_axis_mapping(pointList->at(i).y());
+		//若光标在该点2.5个像素以内, 则显示该点详细信息
+		
+		if (sqrt(pow(CursorPos_x - pixel_x, 2) + pow(CursorPos_y - pixel_y, 2)) < 3.5)
+		{
+			QString str ="x:" + QString::number(pointList->at(i).x(), 10, 3) + " \ny:" + QString::number(pointList->at(i).y(), 10, 3) + QStringLiteral("\n时间:") + pointTimeList.at(i);
+
+			QPainter painter(this);
+			QRectF rect;
+			rect = QRectF(CursorPos_x-60, CursorPos_y-40, 120, 40);
+			painter.drawRect(rect);
+			painter.setPen(QColor(214,20,103));
+
+			painter.drawText(rect, Qt::AlignHCenter, str);
+
+			painter.setPen(QColor(0, 255 ,100));
+			painter.setBrush(QBrush(QColor( 0,255, 100)));
+			painter.drawEllipse(pixel_x - 4, pixel_y - 4, 4 * 2, 4 * 2);
+
+			break;
+		}
 	}
-	series2->setMarkerSize(4);
-	series2->setBorderColor(QColor(0, 0, 0, 0));
-	chart->addSeries(series2);
-
-	chart->createDefaultAxes();
-	chart->axisX()->setRange(x_lowerRange, x_upperRange);
-	chart->axisY()->setRange(y_lowerRange, y_upperRange);
-	chart->legend()->setVisible(false);
-
-	chart->setTitle(Title);
-	ui.Chart->setChart(chart);
-
-
-
-	this->update();*/
 }
 
 double MaoChart::Interpolation(double x1, double y1, double x2, double y2, double value_x)
