@@ -1,0 +1,25 @@
+<UI version="4.0" >
+ <class>MaoChartClass</class>
+ <widget class="QWidget" name="MaoChartClass" >
+  <property name="objectName" >
+   <string notr="true">MaoChartClass</string>
+  </property>
+  <property name="geometry" >
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>400</height>
+   </rect>
+  </property>
+  <property name="windowTitle" >
+   <string>MaoChart</string>
+  </property>$centralwidget$
+ </widget>
+ <layoutDefault spacing="6" margin="11" />
+ <pixmapfunction></pixmapfunction>
+ <resources>
+   <include location="MaoChart.qrc"/>
+ </resources>
+ <connections/>
+</UI>
